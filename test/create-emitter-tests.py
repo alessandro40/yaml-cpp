@@ -2,6 +2,7 @@ import sys
 import yaml
 import hashlib
 
+NS = 'Emitter'
 DEFINE = 'YAML_GEN_TESTS'
 EVENT_COUNT = 5
 
@@ -23,22 +24,22 @@ def encode(line):
 
 def doc_start(implicit=False):
     if implicit:
-        return {'emit': '', 'handle': 'OnDocumentStart(_)'}
+        return {'emit': '', 'handle': 'DOC_START()'}
     else:
-        return {'emit': 'BeginDoc', 'handle': 'OnDocumentStart(_)'}
+        return {'emit': 'YAML::BeginDoc', 'handle': 'DOC_START()'}
 
 def doc_end(implicit=False):
     if implicit:
-        return {'emit': '', 'handle': 'OnDocumentEnd()'}
+        return {'emit': '', 'handle': 'DOC_END()'}
     else:
-        return {'emit': 'EndDoc', 'handle': 'OnDocumentEnd()'}
+        return {'emit': 'YAML::EndDoc', 'handle': 'DOC_END()'}
 
 def scalar(value, tag='', anchor='', anchor_id=0):
     emit = []
     if tag:
-        emit += ['VerbatimTag("%s")' % encode(tag)]
+        emit += ['YAML::VerbatimTag("%s")' % encode(tag)]
     if anchor:
-        emit += ['Anchor("%s")' % encode(anchor)]
+        emit += ['YAML::Anchor("%s")' % encode(anchor)]
     if tag:
         out_tag = encode(tag)
     else:
@@ -47,42 +48,42 @@ def scalar(value, tag='', anchor='', anchor_id=0):
         else:
             out_tag = '!'
     emit += ['"%s"' % encode(value)]
-    return {'emit': emit, 'handle': 'OnScalar(_, "%s", %s, "%s")' % (out_tag, anchor_id, encode(value))}
+    return {'emit': emit, 'handle': 'SCALAR("%s", %s, "%s")' % (out_tag, anchor_id, encode(value))}
 
 def comment(value):
-    return {'emit': 'Comment("%s")' % value, 'handle': ''}
+    return {'emit': 'YAML::Comment("%s")' % value, 'handle': ''}
 
 def seq_start(tag='', anchor='', anchor_id=0):
     emit = []
     if tag:
-        emit += ['VerbatimTag("%s")' % encode(tag)]
+        emit += ['YAML::VerbatimTag("%s")' % encode(tag)]
     if anchor:
-        emit += ['Anchor("%s")' % encode(anchor)]
+        emit += ['YAML::Anchor("%s")' % encode(anchor)]
     if tag:
         out_tag = encode(tag)
     else:
         out_tag = '?'
-    emit += ['BeginSeq']
-    return {'emit': emit, 'handle': 'OnSequenceStart(_, "%s", %s)' % (out_tag, anchor_id)}
+    emit += ['YAML::BeginSeq']
+    return {'emit': emit, 'handle': 'SEQ_START("%s", %s)' % (out_tag, anchor_id)}
 
 def seq_end():
-    return {'emit': 'EndSeq', 'handle': 'OnSequenceEnd()'}
+    return {'emit': 'YAML::EndSeq', 'handle': 'SEQ_END()'}
 
 def map_start(tag='', anchor='', anchor_id=0):
     emit = []
     if tag:
-        emit += ['VerbatimTag("%s")' % encode(tag)]
+        emit += ['YAML::VerbatimTag("%s")' % encode(tag)]
     if anchor:
-        emit += ['Anchor("%s")' % encode(anchor)]
+        emit += ['YAML::Anchor("%s")' % encode(anchor)]
     if tag:
         out_tag = encode(tag)
     else:
         out_tag = '?'
-    emit += ['BeginMap']
-    return {'emit': emit, 'handle': 'OnMapStart(_, "%s", %s)' % (out_tag, anchor_id)}
+    emit += ['YAML::BeginMap']
+    return {'emit': emit, 'handle': 'MAP_START("%s", %s)' % (out_tag, anchor_id)}
 
 def map_end():
-    return {'emit': 'EndMap', 'handle': 'OnMapEnd()'}
+    return {'emit': 'YAML::EndMap', 'handle': 'MAP_END()'}
 
 def gen_templates():
     yield [[doc_start(), doc_start(True)],
@@ -139,73 +140,45 @@ def gen_tests():
     for events in gen_events():
         name = 'test' + hashlib.sha1(''.join(yaml.dump(event) for event in events)).hexdigest()[:20]
         yield {'name': name, 'events': events}
-
-class Writer(object):
-    def __init__(self, out):
-        self.out = out
-        self.indent = 0
-    
-    def writeln(self, s):
-        self.out.write('%s%s\n' % (' ' * self.indent, s))
-
-class Scope(object):
-    def __init__(self, writer, name, indent):
-        self.writer = writer
-        self.name = name
-        self.indent = indent
-
-    def __enter__(self):
-        self.writer.writeln('%s {' % self.name)
-        self.writer.indent += self.indent
-    
-    def __exit__(self, type, value, traceback):
-        self.writer.indent -= self.indent
-        self.writer.writeln('}')
+        
 
 def create_emitter_tests(out):
-    out = Writer(out)
-    
-    includes = [
-        'handler_test.h',
-        'yaml-cpp/yaml.h',
-        'gmock/gmock.h',
-        'gtest/gtest.h',
-    ]
-    for include in includes:
-        out.writeln('#include "%s"' % include)
-    out.writeln('')
+    out.write('#ifdef %s\n' % DEFINE)
+    out.write('namespace %s {\n' % NS)
 
-    usings = [
-        '::testing::_',
-    ]
-    for using in usings:
-        out.writeln('using %s;' % using)
-    out.writeln('')
+    tests = list(gen_tests())
 
-    with Scope(out, 'namespace YAML', 0) as _:
-        with Scope(out, 'namespace', 0) as _:
-            out.writeln('')
-            out.writeln('typedef HandlerTest GenEmitterTest;')
-            out.writeln('')
-            tests = list(gen_tests())
+    for test in tests:
+        out.write('TEST %s(YAML::Emitter& out)\n' % test['name'])
+        out.write('{\n')
+        for event in test['events']:
+            emit = event['emit']
+            if isinstance(emit, list):
+                for e in emit:
+                    out.write('    out << %s;\n' % e)
+            elif emit:
+                out.write('    out << %s;\n' % emit)
+        out.write('\n')
+        out.write('    HANDLE(out.c_str());\n')
+        for event in test['events']:
+            handle = event['handle']
+            if handle:
+                out.write('    EXPECT_%s;\n' % handle)
+        out.write('    DONE();\n')
+        out.write('}\n')
 
-            for test in tests:
-                with Scope(out, 'TEST_F(%s, %s)' % ('GenEmitterTest', test['name']), 2) as _:
-                    out.writeln('Emitter out;')
-                    for event in test['events']:
-                        emit = event['emit']
-                        if isinstance(emit, list):
-                            for e in emit:
-                                out.writeln('out << %s;' % e)
-                        elif emit:
-                            out.writeln('out << %s;' % emit)
-                    out.writeln('')
-                    for event in test['events']:
-                        handle = event['handle']
-                        if handle:
-                            out.writeln('EXPECT_CALL(handler, %s);' % handle)
-                    out.writeln('Parse(out.c_str());')
-                out.writeln('')
+    out.write('}\n')
+    out.write('#endif // %s\n\n' % DEFINE)
+
+    out.write('void RunGenEmitterTests(int& passed, int& total)\n')
+    out.write('{\n')
+    out.write('#ifdef %s\n' % DEFINE)
+    for test in tests:
+        out.write('    RunGenEmitterTest(&Emitter::%s, "%s", passed, total);\n' % (test['name'], encode(test['name'])))
+    out.write('#else // %s\n' % DEFINE)
+    out.write('   (void)passed; (void)total;\n')
+    out.write('#endif // %s\n' % DEFINE)
+    out.write('}\n')
 
 if __name__ == '__main__':
     create_emitter_tests(sys.stdout)
