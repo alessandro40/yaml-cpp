@@ -23,7 +23,7 @@ LOCAL_SRC_FILES := \
     ostream_wrapper.cpp \
     parse.cpp \
     parser.cpp \
-    regex_yaml.cpp \
+    regex.cpp \
     scanner.cpp \
     scanscalar.cpp \
     scantag.cpp \
