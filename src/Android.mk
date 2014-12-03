@@ -6,7 +6,19 @@ LOCAL_MODULE := yaml-cpp
 
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/../include/ \
-    $(LOCAL_PATH)/../../
+    $(LOCAL_PATH)/../../ \
+    $(LOCAL_PATH)/../../boost/smart_ptr/include \
+    $(LOCAL_PATH)/../../boost/config/include/ \
+    $(LOCAL_PATH)/../../boost/assert/include/ \
+    $(LOCAL_PATH)/../../boost/core/include/ \
+    $(LOCAL_PATH)/../../boost/throw_exception/include/ \
+    $(LOCAL_PATH)/../../boost/iterator/include/ \
+    $(LOCAL_PATH)/../../boost/mpl/include/ \
+    $(LOCAL_PATH)/../../boost/preprocessor/include/ \
+    $(LOCAL_PATH)/../../boost/type_traits/include/ \
+    $(LOCAL_PATH)/../../boost/static_assert/include/ \
+    $(LOCAL_PATH)/../../boost/detail/include/ \
+    $(LOCAL_PATH)/../../boost/utility/include/
 
 LOCAL_SRC_FILES := \
     $(LOCAL_PATH)/binary.cpp \
